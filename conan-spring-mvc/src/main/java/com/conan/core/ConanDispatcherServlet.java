@@ -7,6 +7,7 @@ import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.reflect.Method;
@@ -67,8 +68,30 @@ public class ConanDispatcherServlet extends HttpServlet {
         doLoadConfigFile(configFile);
         //2、从配置文件中获取扫描路径basePackage
         String basePackage = properties.getProperty("basePackage");
-        URL url = this.getClass().getClassLoader().getResource(basePackage.replaceAll(".", "/"));
+        //3、获取扫描到的所有bean对象的全路径列表
+        doLoadBeanNameList(basePackage);
         //TODO
+        System.out.println(beanNameList);
+    }
+
+    /**
+     * 获取给定路径下的所有class类全称列表
+     * 递归调用
+     * @param basePackage
+     */
+    private void doLoadBeanNameList(String basePackage) {
+        URL url = this.getClass().getClassLoader().getResource(basePackage.replaceAll("\\.", "\\" + File.separator));
+        String path = url.getPath();
+        File[] fileArray =  new File(path).listFiles();
+        for(int i = 0; i < fileArray.length; i++){
+            File file = fileArray[i];
+            String fileName = file.getName();
+            if(file.isDirectory()){
+                doLoadBeanNameList(basePackage + "." + fileName);
+            }else if(fileName.endsWith(".class")){
+                beanNameList.add(basePackage + "." + fileName.substring(0, (fileName.length() - 6)));
+            }
+        }
     }
 
     /**
