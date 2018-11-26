@@ -110,19 +110,14 @@ public class ConanDispatcherServlet extends HttpServlet {
                     //忽略空格
                     String serviceName = conanService.name().trim();
                     Object instance = clazz.newInstance();
-                    //ioc容器保存两份数据，一部分是name和instance的对应关系，如下：
                     saveIOCItem(clazz, serviceName, instance);
-                    //另一部分是class类全称和instance的对应关系，按类型注入时使用
-                    iocContainer.put(beanName, instance);
                 //对所有标注了ConanController的类进行处理
                 }else if(clazz.isAnnotationPresent(ConanController.class)){
-                    ConanController conanCOntroller = clazz.getAnnotation(ConanController.class);
+                    ConanController conanController = clazz.getAnnotation(ConanController.class);
                     //忽略空格
-                    String serviceName = conanCOntroller.name().trim();
+                    String controllerName = conanController.name().trim();
                     Object instance = clazz.newInstance();
-                    saveIOCItem(clazz, serviceName, instance);
-                    //另一部分是class类全称和instance的对应关系，按类型注入时使用
-                    iocContainer.put(beanName, instance);
+                    saveIOCItem(clazz, controllerName, instance);
                 }
 
             } catch (Exception e) {
@@ -134,13 +129,12 @@ public class ConanDispatcherServlet extends HttpServlet {
     /**
      * 抽取公用方法，提高代码复用率
      * @param clazz
-     * @param annotationName 获取的注解name值
+     * @param annotationValue 获取的注解name值
      * @param instance
      */
-    private void saveIOCItem(Class<?> clazz, String annotationName, Object instance) {
-        //ioc容器保存两份数据，一部分是name和instance的对应关系，如下：
-        if(!"".equals(annotationName)){
-            iocContainer.put(annotationName, instance);
+    private void saveIOCItem(Class<?> clazz, String annotationValue, Object instance) {
+        if(!"".equals(annotationValue)){
+            iocContainer.put(annotationValue, instance);
         }else{
             //默认以className首字母小写之后的字符串为key
             String simpleName = clazz.getSimpleName();
