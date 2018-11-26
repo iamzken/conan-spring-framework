@@ -1,5 +1,7 @@
 package com.conan.core.annotation;
 
+import com.conan.core.annotation.common.ConanCommon;
+
 import java.lang.annotation.*;
 
 /**
@@ -10,6 +12,6 @@ import java.lang.annotation.*;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface ConanService {
+public @interface ConanService{
     String name() default "";
 }
