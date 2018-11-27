@@ -7,5 +7,6 @@ package com.conan.core.exception;
  **/
 public class ConanApplicationContextInitializationException extends RuntimeException {
     public ConanApplicationContextInitializationException(String s) {
+        super(s);
     }
 }

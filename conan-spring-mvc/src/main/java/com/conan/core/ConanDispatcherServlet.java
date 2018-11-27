@@ -2,6 +2,7 @@ package com.conan.core;
 
 import com.conan.core.annotation.*;
 import com.conan.core.exception.ConanApplicationContextInitializationException;
+import com.conan.core.exception.ConanApplicationContextInvocationException;
 
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
@@ -65,7 +66,13 @@ public class ConanDispatcherServlet extends HttpServlet {
             resp.getWriter().write("404 - Not Found");
             return;
         }
-        handler.handle(req, resp);
+        try {
+            Object result = handler.handle(req, resp);
+            resp.getWriter().write(result.toString());
+        } catch (ConanApplicationContextInvocationException e) {
+            e.printStackTrace();
+            resp.getWriter().write("500 - Internal Server Error");
+        }
     }
 
     @Override
@@ -271,7 +278,7 @@ public class ConanDispatcherServlet extends HttpServlet {
          * 本版本只支持参数类型为String的handler，其他类型在随后的版本中会逐步实现
          * @param request
          */
-        public void handle(HttpServletRequest request, HttpServletResponse response) {
+        public Object handle(HttpServletRequest request, HttpServletResponse response) throws ConanApplicationContextInvocationException{
             Annotation[][] parameterAnnotations = method.getParameterAnnotations();
             Map<String, String[]> parameterMap = request.getParameterMap();
             Object[] argValues = new Object[parameterAnnotations.length];
@@ -287,19 +294,18 @@ public class ConanDispatcherServlet extends HttpServlet {
             }
             try {
                 Object result = method.invoke(object, argValues);
-                //此处将method的返回结果进行简单的输出
-                response.getWriter().write(result.toString());
-            } catch (IllegalAccessException e) {
+                return result;
+            } catch (Exception e) {
                 e.printStackTrace();
-            } catch (InvocationTargetException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
+                throw new ConanApplicationContextInvocationException("spring调用异常" + e);
             }
         }
 
         private Object castToString(String[] strings) {
 
+            if(strings == null || strings.length == 0){
+                return "";
+            }
             StringBuffer result = new StringBuffer();
             for(int i = 0; i< strings.length; i++){
                 result.append(strings[i]);
