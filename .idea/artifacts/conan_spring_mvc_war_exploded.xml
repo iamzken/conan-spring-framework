@@ -1,0 +1,13 @@
+<component name="ArtifactManager">
+  <artifact type="exploded-war" name="conan-spring-mvc:war exploded">
+    <output-path>$PROJECT_DIR$/out/artifacts/conan_spring_mvc_war_exploded</output-path>
+    <root id="root">
+      <element id="directory" name="WEB-INF">
+        <element id="directory" name="classes">
+          <element id="module-output" name="conan-spring-mvc" />
+        </element>
+      </element>
+      <element id="javaee-facet-resources" facet="conan-spring-mvc/web/Web" />
+    </root>
+  </artifact>
+</component>

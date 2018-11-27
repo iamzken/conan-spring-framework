@@ -3,6 +3,7 @@ package com.conan.core;
 import com.conan.core.annotation.*;
 import com.conan.core.exception.ConanApplicationContextInitializationException;
 import com.conan.core.exception.ConanApplicationContextInvocationException;
+import com.conan.core.exception.ConanApplicationContextResolverException;
 import com.conan.core.modelview.ConanModelAndView;
 import com.conan.core.viewresolver.ConanViewResolver;
 
@@ -83,7 +84,10 @@ public class ConanDispatcherServlet extends HttpServlet {
             resp.getWriter().write(result.toString());
         } catch (ConanApplicationContextInvocationException e) {
             e.printStackTrace();
-            resp.getWriter().write("500 - Internal Server Error");
+            resp.getWriter().write("500 - initialization error");
+        } catch (ConanApplicationContextResolverException e) {
+            e.printStackTrace();
+            resp.getWriter().write("500 - view resolver error");
         }
     }
 
@@ -92,9 +96,16 @@ public class ConanDispatcherServlet extends HttpServlet {
      * @param result
      * @return
      */
-    private void processReturnResult(Object result) {
-        //TODO
+    private void processReturnResult(Object result) throws ConanApplicationContextResolverException {
         ConanModelAndView modelAndView = (ConanModelAndView) result;
+        String viewName = modelAndView.getView();
+        ConanViewResolver viewResolver = viewResolverMapping.get(viewName);
+        Map<String, Object> model = modelAndView.getModel();
+        //如果没有对应的viewResolver，则直接返回
+        if(viewResolver == null){
+            return;
+        }
+        viewResolver.resolve(model);
     }
 
     @Override
@@ -125,6 +136,7 @@ public class ConanDispatcherServlet extends HttpServlet {
      * @param templateRoot
      */
     private void initViewResolverMapping(String templateRoot) {
+        //TODO 此处如何获取模板文件在tomcat下的路径？
         File rootFile = new File(templateRoot);
         if(!rootFile.exists()){
             return;
