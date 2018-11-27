@@ -3,6 +3,8 @@ package com.conan.core;
 import com.conan.core.annotation.*;
 import com.conan.core.exception.ConanApplicationContextInitializationException;
 import com.conan.core.exception.ConanApplicationContextInvocationException;
+import com.conan.core.modelview.ConanModelAndView;
+import com.conan.core.viewresolver.ConanViewResolver;
 
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
@@ -13,13 +15,14 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -53,6 +56,11 @@ public class ConanDispatcherServlet extends HttpServlet {
      */
     private Map<String, Handler> uriHandlerMapping = new ConcurrentHashMap<String, Handler>();
 
+    /**
+     * 视图解析器映射器，key为模板名称，view为模板文件
+     */
+    private Map<String, ConanViewResolver> viewResolverMapping = new ConcurrentHashMap<>();
+
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         doPost(req, resp);
@@ -68,11 +76,25 @@ public class ConanDispatcherServlet extends HttpServlet {
         }
         try {
             Object result = handler.handle(req, resp);
+            if(handler.method.getReturnType() == ConanModelAndView.class){
+                //处理返回结果
+                processReturnResult(result);
+            }
             resp.getWriter().write(result.toString());
         } catch (ConanApplicationContextInvocationException e) {
             e.printStackTrace();
             resp.getWriter().write("500 - Internal Server Error");
         }
+    }
+
+    /**
+     * 处理结果，根据ModelAndView找到模板并填充数据后返回
+     * @param result
+     * @return
+     */
+    private void processReturnResult(Object result) {
+        //TODO
+        ConanModelAndView modelAndView = (ConanModelAndView) result;
     }
 
     @Override
@@ -93,7 +115,28 @@ public class ConanDispatcherServlet extends HttpServlet {
         autowire(iocContainer);
         //5、初始化UrlHandlerMapping
         initUriHandlerMapping(iocContainer);
+        //6、初始化ViewResolverList
+        initViewResolverMapping(properties.getProperty("templateRoot"));
 
+    }
+
+    /**
+     * 初始化ViewResolverList，建立templateName和templateFile的映射关系
+     * @param templateRoot
+     */
+    private void initViewResolverMapping(String templateRoot) {
+        File rootFile = new File(templateRoot);
+        if(!rootFile.exists()){
+            return;
+        }
+        for (File file : rootFile.listFiles()){
+            if(file.isDirectory()){
+                initViewResolverMapping(templateRoot + "/" + file.getName());
+            }else{
+                ConanViewResolver resolver = new ConanViewResolver(file);
+                viewResolverMapping.put(file.getName(), resolver);
+            }
+        }
     }
 
     /**
@@ -294,6 +337,9 @@ public class ConanDispatcherServlet extends HttpServlet {
             }
             try {
                 Object result = method.invoke(object, argValues);
+                if(method.getReturnType() == ConanModelAndView.class){
+
+                }
                 return result;
             } catch (Exception e) {
                 e.printStackTrace();
