@@ -1,7 +1,7 @@
 package com.conan.core;
 
-import com.conan.core.annotation.ConanController;
-import com.conan.core.annotation.ConanService;
+import com.conan.core.annotation.*;
+import com.conan.core.exception.ConanApplicationContextInitializationException;
 
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
@@ -14,9 +14,12 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author: zhangkenan
@@ -38,14 +41,16 @@ public class ConanDispatcherServlet extends HttpServlet {
 
     /**
      * 这就是传说中的ioc容器，其实只是一个map，key为beanNameList中保存的beanName，value为对应类的一个实例对象
+     * 使用ConcurrentHashMap确保线程安全
      */
-    private Map<String, Object> iocContainer = new HashMap<String, Object>();
+    private Map<String, Object> iocContainer = new ConcurrentHashMap<String, Object>();
 
     /**
      * 这就是传说中的handlerMapping，其实也是一个map，key为controller上的@ConanRequestMapping的值和方法上的@ConanRequestMapping
      * 的值确定的唯一路径，value为对应的Method对象
+     * 使用ConcurrentHashMap确保线程安全
      */
-    private Map<String, Method> handlerMapping = new HashMap<String, Method>();
+    private Map<String, Handler> uriHandlerMapping = new ConcurrentHashMap<String, Handler>();
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -54,8 +59,13 @@ public class ConanDispatcherServlet extends HttpServlet {
 
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        PrintWriter writer = resp.getWriter();
-        writer.write("what the fuck!");
+        String uri = req.getRequestURI().replace(req.getContextPath(), "");
+        Handler handler = uriHandlerMapping.get(uri);
+        if(handler == null){
+            resp.getWriter().write("404 - Not Found");
+            return;
+        }
+        handler.handle(req, resp);
     }
 
     @Override
@@ -72,9 +82,36 @@ public class ConanDispatcherServlet extends HttpServlet {
         loadBeanNameList(properties.getProperty("basePackage"));
         //3、初始化ioc容器
         initIocContainer(beanNameList);
-        //4、自动装配 TODO
+        //4、自动装配
         autowire(iocContainer);
+        //5、初始化UrlHandlerMapping
+        initUriHandlerMapping(iocContainer);
 
+    }
+
+    /**
+     * 初始化UrlHandlerMapping，实质就是将controller的requestMapping+method的requestMapping和instance+method的对应关系保存起来，即url--->handler
+     * 只在controller层进行此操作
+     * @param iocContainer
+     */
+    private void initUriHandlerMapping(Map<String, Object> iocContainer) {
+        iocContainer.forEach((key, value) -> {
+            Class<?> clazz = value.getClass();
+            if(clazz.isAnnotationPresent(ConanController.class)){
+                //获取该bean的所有public方法，包括从父类继承过来的public方法
+                Method[] methods = clazz.getMethods();
+                for (Method method : methods) {
+                    StringBuffer uri = new StringBuffer();
+                    if(clazz.isAnnotationPresent(ConanRequestMapping.class)){
+                        uri.append(clazz.getAnnotation(ConanRequestMapping.class).value());
+                    }
+                    if(method.isAnnotationPresent(ConanRequestMapping.class)){
+                        uri.append(method.getAnnotation(ConanRequestMapping.class).value());
+                        uriHandlerMapping.put(uri.toString(), new Handler(value, method));
+                    }
+                }
+            }
+        });
     }
 
     /**
@@ -86,8 +123,40 @@ public class ConanDispatcherServlet extends HttpServlet {
         if(iocContainer == null || iocContainer.size() == 0){
             return;
         }
-        for (Map.Entry entry : iocContainer.entrySet()) {
-            
+        for (Map.Entry<String, Object> entry : iocContainer.entrySet()) {
+            Object bean = entry.getValue();
+            Class<?> clazz = bean.getClass();
+            //获取本类所有字段信息，包括private字段，但不包括父类继承的字段
+            for(Field field : clazz.getDeclaredFields()){
+                if(field.isAnnotationPresent(ConanAutowired.class)) {
+                    field.setAccessible(true);
+                    ConanAutowired conanAutowired = field.getAnnotation(ConanAutowired.class);
+                    String key = conanAutowired.value().trim();
+                    //默认按照name注入
+                    if (!"".equals(key)){
+                        try {
+                            field.set(bean, iocContainer.get(key));
+                        } catch (IllegalAccessException e) {
+                            e.printStackTrace();
+                        }
+                    //name不存在，则以className首字母小写为key进行注入，如果也不匹配，则按照type注入，如果还不匹配，则抛出异常
+                    }else{
+                        key = field.getName();
+                        Object o = iocContainer.get(key);
+                        if(o == null){
+                            o = iocContainer.get(field.getType().getName());
+                            if(o == null){
+                                throw new ConanApplicationContextInitializationException("spring容器初始化失败，字段" + clazz.getName() + "." +field.getName() + "无法注入，因为没有找到合适的注入对象");
+                            }
+                        }
+                        try {
+                            field.set(bean, o);
+                        } catch (IllegalAccessException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -136,12 +205,18 @@ public class ConanDispatcherServlet extends HttpServlet {
         if(!"".equals(annotationValue)){
             iocContainer.put(annotationValue, instance);
         }else{
-            //默认以className首字母小写之后的字符串为key
-            String simpleName = clazz.getSimpleName();
+            //controller默认以className首字母小写之后的字符串为key
+            String name = clazz.getSimpleName();
             //将字符串首字母进行小写处理
-            char[] simpleNameCharArray = simpleName.toCharArray();
+            char[] simpleNameCharArray = name.toCharArray();
             simpleNameCharArray[0] += 32;
-            iocContainer.put(String.valueOf(simpleNameCharArray), instance);
+            name = String.valueOf(simpleNameCharArray);
+            if(clazz.isAnnotationPresent(ConanService.class)){
+                //如果是service则以className全称为key，按类型注入时使用
+                name = clazz.getName();
+            }
+
+            iocContainer.put(name, instance);
         }
     }
 
@@ -175,6 +250,61 @@ public class ConanDispatcherServlet extends HttpServlet {
         } catch (IOException e) {
             e.printStackTrace();
             throw new ServletException(e);
+        }
+    }
+
+    /**
+     * 自定义内部类，封装instance和method，作为一个handler
+     */
+    private class Handler {
+
+        private Object object;
+        private Method method;
+
+        public Handler(Object object, Method method) {
+            this.object = object;
+            this.method = method;
+        }
+
+        /**
+         * 根据浏览器传过来的请求参数进行组装并通过反射调用相应的method
+         * 本版本只支持参数类型为String的handler，其他类型在随后的版本中会逐步实现
+         * @param request
+         */
+        public void handle(HttpServletRequest request, HttpServletResponse response) {
+            Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+            Map<String, String[]> parameterMap = request.getParameterMap();
+            Object[] argValues = new Object[parameterAnnotations.length];
+            for (int i = 0; i < parameterAnnotations.length; i++){
+                Annotation[] annotations = parameterAnnotations[i];
+                for(Annotation annotation : annotations){
+                    if(annotation instanceof ConanRequestParam){
+                        String name = ((ConanRequestParam) annotation).value();
+                        //本版本一律以字符串处理
+                        argValues[i] = castToString(parameterMap.get(name));
+                    }
+                }
+            }
+            try {
+                Object result = method.invoke(object, argValues);
+                //此处将method的返回结果进行简单的输出
+                response.getWriter().write(result.toString());
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            } catch (InvocationTargetException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        private Object castToString(String[] strings) {
+
+            StringBuffer result = new StringBuffer();
+            for(int i = 0; i< strings.length; i++){
+                result.append(strings[i]);
+            }
+            return result.toString();
         }
     }
 }

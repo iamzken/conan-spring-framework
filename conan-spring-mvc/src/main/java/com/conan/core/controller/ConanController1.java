@@ -24,12 +24,13 @@ public class ConanController1 {
      * 加法
      * @param first 第一个加数
      * @param second 第二个加数
+     * @param third 第三个加数
      * @return 两个数的和
      */
     @ConanRequestMapping("/add")
-    public double add(@ConanRequestParam("fst")double first, @ConanRequestParam("snc")double second){
+    public String add(@ConanRequestParam("fst")String first, @ConanRequestParam("snc")String second, String third){
 
-        return conanService1.add(first, second);
+        return String.valueOf(conanService1.add(Double.valueOf(first), Double.valueOf(second)));
     }
 
     /**
@@ -39,9 +40,9 @@ public class ConanController1 {
      * @return 两个数的差
      */
     @ConanRequestMapping("/minus")
-    public double minus(@ConanRequestParam("fst")double first, @ConanRequestParam("snd")double second){
+    public String minus(@ConanRequestParam("fst")String first, @ConanRequestParam("snd")String second){
 
-        return conanService1.minus(first, second);
+        return String.valueOf(conanService1.minus(Double.valueOf(first), Double.valueOf(second)));
     }
 
     /**
@@ -51,9 +52,9 @@ public class ConanController1 {
      * @return 乘积
      */
     @ConanRequestMapping("/multiply")
-    public double multiply(@ConanRequestParam("fst")double first, @ConanRequestParam("snd")double second){
+    public String multiply(@ConanRequestParam("fst")String first, @ConanRequestParam("snd")String second){
 
-        return conanService1.minus(first, second);
+        return String.valueOf(conanService1.multiply(Double.valueOf(first), Double.valueOf(second)));
     }
 
     /**
@@ -63,14 +64,14 @@ public class ConanController1 {
      * @return 除法结果
      */
     @ConanRequestMapping("/divide")
-    public double divide(@ConanRequestParam("fst")double first, @ConanRequestParam("second")double second){
+    public String divide(@ConanRequestParam("fst")String first, @ConanRequestParam("second")String second){
 
         String regExp = "([0]+)|[0]+.(0)*";
         Pattern pattern = Pattern.compile(regExp);
-        if(pattern.matcher(Double.valueOf(second).toString()).find()){
-            return 0;
+        if(pattern.matcher(String.valueOf(second).toString()).find()){
+            return "0";
         }
-        return conanService1.divide(first, second);
+        return String.valueOf(conanService1.divide(Double.valueOf(first), Double.valueOf(second)));
     }
 
     /**
