@@ -3,6 +3,9 @@ package com.conan.core;
 import com.conan.core.annotation.*;
 import com.conan.core.exception.ConanApplicationContextInitializationException;
 import com.conan.core.exception.ConanApplicationContextInvocationException;
+import com.conan.core.exception.ConanApplicationContextResolverException;
+import com.conan.core.modelview.ConanModelAndView;
+import com.conan.core.viewresolver.ConanViewResolver;
 
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
@@ -13,13 +16,14 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -53,6 +57,11 @@ public class ConanDispatcherServlet extends HttpServlet {
      */
     private Map<String, Handler> uriHandlerMapping = new ConcurrentHashMap<String, Handler>();
 
+    /**
+     * 视图解析器映射器，key为模板名称，view为模板文件
+     */
+    private Map<String, ConanViewResolver> viewResolverMapping = new ConcurrentHashMap<>();
+
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         doPost(req, resp);
@@ -68,11 +77,35 @@ public class ConanDispatcherServlet extends HttpServlet {
         }
         try {
             Object result = handler.handle(req, resp);
+            if(handler.method.getReturnType() == ConanModelAndView.class){
+                //处理返回结果
+                result = processReturnResult(result);
+            }
             resp.getWriter().write(result.toString());
         } catch (ConanApplicationContextInvocationException e) {
             e.printStackTrace();
-            resp.getWriter().write("500 - Internal Server Error");
+            resp.getWriter().write("500 - initialization error");
+        } catch (ConanApplicationContextResolverException e) {
+            e.printStackTrace();
+            resp.getWriter().write("500 - view resolver error");
         }
+    }
+
+    /**
+     * 处理结果，根据ModelAndView找到模板并填充数据后返回
+     * @param result
+     * @return
+     */
+    private Object processReturnResult(Object result) throws ConanApplicationContextResolverException {
+        ConanModelAndView modelAndView = (ConanModelAndView) result;
+        String viewName = modelAndView.getView();
+        ConanViewResolver viewResolver = viewResolverMapping.get(viewName);
+        Map<String, Object> model = modelAndView.getModel();
+        //如果没有对应的viewResolver，则直接返回
+        if(viewResolver == null){
+            throw new ConanApplicationContextResolverException("view resolver not found");
+        }
+        return viewResolver.resolve(model);
     }
 
     @Override
@@ -93,9 +126,58 @@ public class ConanDispatcherServlet extends HttpServlet {
         autowire(iocContainer);
         //5、初始化UrlHandlerMapping
         initUriHandlerMapping(iocContainer);
+        //6、初始化ViewResolverList
+        initViewResolverMapping(properties.getProperty("template.prefix"));
 
     }
 
+    /**
+     * 初始化ViewResolverList，建立templateName和templateFile的映射关系
+     * @param prefix 模板文件前缀
+     */
+    private void initViewResolverMapping(String prefix) {
+        String rootPath = getClassPath();
+        initViewResolverMapping(rootPath + prefix, prefix, properties.getProperty("template.suffix"));
+
+    }
+
+    /**
+     * 重载方法，供方法private void initViewResolverMapping(String prefix, String suffix)递归调用使用
+     * @param rootPath 当前根路径
+     * @param prefix 模板文件前缀
+     * @param suffix 模板文件后缀
+     */
+    private void initViewResolverMapping(String rootPath, String prefix, String suffix){
+        File rootFile = new File(rootPath);
+        if(!rootFile.exists()){
+            return;
+        }
+        for (File file : rootFile.listFiles()){
+            if(file.isDirectory()){
+                initViewResolverMapping( rootPath+ "/" + file.getName(), prefix, suffix);
+            }else{
+                if(!file.getName().endsWith(suffix)){
+                    continue;
+                }
+                ConanViewResolver resolver = new ConanViewResolver(file);
+                try {
+                    //将反斜杠\替换为正斜杠/,去掉classPath + prefix部分，prefix要把第一个正斜杠/去掉，去掉后缀，结果只剩下逻辑视图名称
+                    viewResolverMapping.put(file.getCanonicalPath().replaceAll("\\\\", "\\/").replace(getClassPath() + prefix.substring(1) + "/", "").replace(suffix, ""), resolver);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    /**
+     * 获取classPath
+     * @return
+     */
+    private String getClassPath(){
+        //获取的原始路径是/E:/git/conan-spring/conan-spring-mvc/target/conan-spring-mvc-1.0-SNAPSHOT/WEB-INF/classes/，故需要进行简单的处理
+        return Thread.currentThread().getContextClassLoader().getResource("").getPath().substring(1);
+    }
     /**
      * 初始化UrlHandlerMapping，实质就是将controller的requestMapping+method的requestMapping和instance+method的对应关系保存起来，即url--->handler
      * 只在controller层进行此操作
@@ -294,6 +376,9 @@ public class ConanDispatcherServlet extends HttpServlet {
             }
             try {
                 Object result = method.invoke(object, argValues);
+                if(method.getReturnType() == ConanModelAndView.class){
+
+                }
                 return result;
             } catch (Exception e) {
                 e.printStackTrace();
