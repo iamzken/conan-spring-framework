@@ -11,7 +11,7 @@
 
 3、服务端返回数据中文乱码问题解决
 
-    访问地址：http://localhost:8892/conan-spring-mvc/conan3/test001?name=xiaoming&age=20
+    访问地址：<http://localhost:8892/conan-spring-mvc/conan3/test001?name=xiaoming&age=20>
     
     返回结果：
 
