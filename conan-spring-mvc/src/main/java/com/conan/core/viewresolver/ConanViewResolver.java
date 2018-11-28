@@ -31,7 +31,8 @@ public class ConanViewResolver {
             //将读出的文件内容存入字节缓冲区
             stream.read(bytes);
             stream.close();
-            String fileContent = new String(bytes);
+            //中文乱码问题解决
+            String fileContent = new String(bytes, "utf-8");
             for (Map.Entry<String, Object> entry : model.entrySet()) {
                 //此处使用正则表达式进行字符串替换   注意：左大括号需要转义，右大括号不需要
                 fileContent = fileContent.replaceAll("\\$\\{" + entry.getKey() + "}", entry.getValue().toString());

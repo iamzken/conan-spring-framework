@@ -81,6 +81,8 @@ public class ConanDispatcherServlet extends HttpServlet {
                 //处理返回结果
                 result = processReturnResult(result);
             }
+            //通知浏览器服务端返回的数据类型是简单的文本类型，内容需要使用utf-8进行显示
+            resp.setContentType("text/plain;charset=utf-8");
             resp.getWriter().write(result.toString());
         } catch (ConanApplicationContextInvocationException e) {
             e.printStackTrace();
