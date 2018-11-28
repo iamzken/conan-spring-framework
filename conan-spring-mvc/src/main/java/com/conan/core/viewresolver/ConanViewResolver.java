@@ -31,16 +31,16 @@ public class ConanViewResolver {
             //将读出的文件内容存入字节缓冲区
             stream.read(bytes);
             stream.close();
-            String fileContent = String.valueOf(bytes);
-            model.forEach((key, value) -> {
-                //此处使用正则表达式进行字符串替换
-                fileContent.replaceAll("\\$\\{" + key + "\\}", value.toString());
-            });
+            String fileContent = new String(bytes);
+            for (Map.Entry<String, Object> entry : model.entrySet()) {
+                //此处使用正则表达式进行字符串替换   注意：左大括号需要转义，右大括号不需要
+                fileContent = fileContent.replaceAll("\\$\\{" + entry.getKey() + "}", entry.getValue().toString());
+            }
+            return fileContent;
         } catch (Exception e) {
             e.printStackTrace();
             throw new ConanApplicationContextResolverException("视图解析器解析异常" + e);
         }
-        return null;
     }
 
     public ConanViewResolver(File templateFile) {
