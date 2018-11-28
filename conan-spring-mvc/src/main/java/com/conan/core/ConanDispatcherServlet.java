@@ -127,26 +127,43 @@ public class ConanDispatcherServlet extends HttpServlet {
         //5、初始化UrlHandlerMapping
         initUriHandlerMapping(iocContainer);
         //6、初始化ViewResolverList
-        initViewResolverMapping(properties.getProperty("templateRoot"));
+        initViewResolverMapping(properties.getProperty("template.prefix"));
 
     }
 
     /**
      * 初始化ViewResolverList，建立templateName和templateFile的映射关系
-     * @param templateRoot
+     * @param prefix 模板文件前缀
      */
-    private void initViewResolverMapping(String templateRoot) {
-        //TODO 此处如何获取模板文件在tomcat下的路径？
-        File rootFile = new File(templateRoot);
+    private void initViewResolverMapping(String prefix) {
+        String rootPath = this.getClass().getClassLoader().getResource("").getPath();
+        initViewResolverMapping(rootPath + prefix, properties.getProperty("template.suffix"));
+
+    }
+
+    /**
+     * 重载方法，供方法private void initViewResolverMapping(String prefix, String suffix)递归调用使用
+     * @param rootPath 当前根路径
+     * @param suffix 模板文件后缀
+     */
+    private void initViewResolverMapping(String rootPath, String suffix){
+        File rootFile = new File(rootPath);
         if(!rootFile.exists()){
             return;
         }
         for (File file : rootFile.listFiles()){
             if(file.isDirectory()){
-                initViewResolverMapping(templateRoot + "/" + file.getName());
+                initViewResolverMapping( rootPath+ "/" + file.getName());
             }else{
+                if(!file.getName().endsWith(suffix)){
+                    continue;
+                }
                 ConanViewResolver resolver = new ConanViewResolver(file);
-                viewResolverMapping.put(file.getName(), resolver);
+                try {
+                    viewResolverMapping.put(file.getCanonicalPath().replace(suffix, "").replace(rootPath, ""), resolver);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         }
     }
