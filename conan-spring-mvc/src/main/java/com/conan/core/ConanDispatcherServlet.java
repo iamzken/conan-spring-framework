@@ -76,7 +76,7 @@ public class ConanDispatcherServlet extends HttpServlet {
             return;
         }
         try {
-            Object result = handler.handle(req, resp);
+            Object result = handler.handle(req);
             if(handler.method.getReturnType() == ConanModelAndView.class){
                 //处理返回结果
                 result = processReturnResult(result);
@@ -362,7 +362,7 @@ public class ConanDispatcherServlet extends HttpServlet {
          * 本版本只支持参数类型为String的handler，其他类型在随后的版本中会逐步实现
          * @param request
          */
-        public Object handle(HttpServletRequest request, HttpServletResponse response) throws ConanApplicationContextInvocationException{
+        public Object handle(HttpServletRequest request) throws ConanApplicationContextInvocationException{
             Annotation[][] parameterAnnotations = method.getParameterAnnotations();
             Map<String, String[]> parameterMap = request.getParameterMap();
             Object[] argValues = new Object[parameterAnnotations.length];
